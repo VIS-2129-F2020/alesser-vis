@@ -1,0 +1,293 @@
+---
+title: "Vis Assignment 2 - Mapping"
+author: "Aron Lesser"
+date: "9/18/2020"
+output: html_document
+---
+
+
+```{r load libraries, include=FALSE}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(tidyverse)
+library(ggspatial)
+library(cartogram)
+library(ggthemes)
+```
+
+# Loading a map of world countries
+
+```{r}
+#ne_countries, ne_states, ne_coastlines
+
+world <- ne_countries(scale = 50, returnclass = "sf") 
+
+
+world_map <- ggplot(world) +
+  geom_sf() +
+  theme_bw()
+
+world_map
+
+```
+
+# South America
+
+Here, I filter for South America
+
+```{r}
+sa_countries <- world %>%
+  filter(continent == "South America")
+
+sa_map <- ggplot(sa_countries) +
+  geom_sf() + 
+  theme_bw()
+
+sa_map
+```
+
+# States Brasil
+
+I was playing around with loading states within a country and changing the background color, but will not use this in my assignment. 
+
+```{r}
+brasil_states <- ne_states(country = "Brazil", returnclass = "sf")
+
+brasil_map <- ggplot(brasil_states) +
+  geom_sf() +
+  theme_solarized()
+
+brasil_map
+```
+
+# Maps of South America with Alterations to Coordinate Systems
+
+
+
+```{r}
+
+SA_brasil_Albers <- "+proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12 +lon_0=-54 +x_0=0 +y_0=0 +a=6378160 +b=6356537.557298475 +units=m +no_defs"
+
+SA_brasil_lambert <- "+proj=laea +lat_0=-13 +lon_0=-42 +x_0=600000 +y_0=600000 +ellps=GRS80 +units=m +no_defs"
+
+SA_argentina_bicontinental <- "+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=-63 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+
+SA_equal_area_conic <- "+proj=aea +lat_1=-5 +lat_2=-42 +lat_0=-32 +lon_0=-60 +x_0=0 +y_0=0 +ellps=aust_SA +units=m +no_defs"
+
+
+```
+
+# Brasil Albers
+```{r}
+ggplot(sa_countries) +
+  geom_sf() +
+  coord_sf(crs = SA_brasil_Albers) +
+  theme_bw()
+```
+
+# Brasil Lambert
+
+I notice clear distortions in the southern tip of the continent with the lambert projection. 
+
+```{r}
+ggplot(sa_countries) +
+  geom_sf() +
+  coord_sf(crs = SA_brasil_lambert) +
+  theme_bw()
+```
+
+
+# Argentina Bicontinental Polar
+
+The Argentinna-focused Polar projection distorts the northern side of the continent - or the southern, depending on how we think about it. 
+
+```{r}
+ggplot(sa_countries) +
+  geom_sf() +
+  coord_sf(crs = SA_argentina_bicontinental) +
+  theme_bw()
+
+```
+
+
+# South America Equal Area 
+
+```{r}
+ggplot(sa_countries) +
+  geom_sf() +
+  coord_sf(crs = SA_equal_area_conic) +
+  theme_bw()
+
+```
+
+# Countries Transformed
+
+```{r}
+countries_transformed <- sa_countries %>%
+  st_transform(crs = SA_brasil_Albers)
+```
+
+I decided to use the Albers because it is likely the one that people from the United States are accustomed to seeing. 
+
+# Adding GDP
+
+I downloaded per-capita GDP data from the World Bank and left-joined it using the following code: 
+
+```{r}
+GDP_SA <- read_csv("World Bank Per Capita GDP2.csv")
+
+GDP_countries <-countries_transformed %>%
+  left_join(GDP_SA, by = c("name" = "Country Name")) %>%
+  select(name, "GDP", "Population")
+```
+
+# Chloropleth Map of South America with Per Capita GDP
+
+Here, I plot it as a chloropleth map, adjusting the breaks and lables to fit the range of GDPs. Unfortunately, the World Bank does not have data for Venezuela, which is displayed in grey. 
+
+```{r}
+
+brs <- seq(0, 20000, by=2000)
+labls <- formatC(seq(0, 20000, by=2000), big.mark = ",", format = "f", digits = 0)
+
+
+ggplot(GDP_countries, aes(fill = GDP)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(
+    name = "Per Capita GDP",
+    breaks = brs,
+    labels = labls) +
+  theme_map() +
+  theme(legend.background = element_blank())
+```
+
+## Cartogram
+
+### Continuous, based on GDP
+
+In this map, I distort the countries based on the per-capita GDPs. As we can see, Chile and Uruguay seem much bigger and Brazil shrinks. 
+```{r}
+SA_cartogram_cont <- GDP_countries %>%
+  cartogram_cont("GDP")
+
+
+brs <- seq(0, 20000, by=2000)
+labls <- formatC(seq(0, 20000, by=2000), big.mark = ",", format = "f", digits = 0)
+
+
+ggplot(SA_cartogram_cont, aes(fill = GDP)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(
+    name = "Per Capita GDP",
+    breaks = brs,
+    labels = labls) +
+  theme_map() +
+  theme(legend.background = element_blank())
+```
+
+
+### Non-Continuous
+
+In this non-continous cartogram, I adjust country size based on per-capita GDP. This may be an effective graphic because it demonstrates that large countries such as Brazil have relatively similar per-capita GDPs to many of the region's other countries. It also creates the contrast between Uruguray and Brazil, which I find visually interesting. 
+```{r}
+
+SA_cartogram_ncont <- GDP_countries %>%
+  cartogram_ncont("GDP")
+
+
+brs <- seq(0, 20000, by=2000)
+labls <- formatC(seq(0, 20000, by=2000), big.mark = ",", format = "f", digits = 0)
+
+
+ggplot(SA_cartogram_ncont, aes(fill = GDP)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(
+    name = "Per Capita GDP",
+    breaks = brs,
+    labels = labls) +
+  theme_map() +
+  theme(legend.background = element_blank())
+```
+
+### Non-Continuous with Population 
+
+This is an interesting comparison to the above cartogram, though it does not tell a strong story because the countries in the region are, for the most part, closely proportional in land size and population. 
+
+
+```{r}
+
+SA_cartogram_ncont <- GDP_countries %>%
+  cartogram_ncont("Population")
+
+
+brs <- seq(0, 20000, by=2000)
+labls <- formatC(seq(0, 20000, by=2000), big.mark = ",", format = "f", digits = 0)
+
+
+ggplot(SA_cartogram_ncont, aes(fill = GDP)) +
+  geom_sf(color = NA) +
+  scale_fill_viridis_c(
+    name = "Per Capita GDP",
+    breaks = brs,
+    labels = labls) +
+  theme_map() +
+  theme(legend.background = element_blank())
+```
+
+
+
+### Proportional Symbol
+
+In this proportional symbol map, I highlight GDP with circle sizes. I do not find this visual as effective as some of the above for this particular type of data. I was not able to understand why bolivia's gdp does not display. 
+
+```{r}
+GDP_centeroids <- GDP_countries %>%
+  st_centroid()
+
+brs <- seq(0, 20000, by=2000)
+labls <- formatC(seq(0, 20000, by=2000), big.mark = ",", format = "f", digits = 0)
+
+
+ggplot(countries_transformed) +
+  geom_sf(fill = NA, color = "gray") +
+  geom_sf(data = GDP_centeroids, 
+          aes(size = GDP),
+          alpha = 0.2, color = "blue") +
+  scale_size_continuous(name = "GDP Per Capita",
+    breaks = seq(0, 20000, by=2000),
+    labels = formatC(seq(0, 20000, by=2000), big.mark = ",", format = "f", digits = 0),
+    range = c(0, 15)) +
+  theme_void()
+```
+
+
+### Dorling
+
+I was unable to get my Dorling proejction to work, but I kept the code in to review later. 
+```{r}
+
+
+#GDP_countries$area<- NA
+#GDP_countries$area<- GDP_countries$geometry
+
+#SA_cartogram_dorling <- GDP_countries %>%
+#  cartogram_dorling("Population")
+
+
+#brs <- seq(0, 20000, by=2000)
+#labls <- formatC(seq(0, 20000, by=2000), big.mark = ",", format = "f", digits = 0)
+
+
+#ggplot(SA_cartogram_dorling, aes(fill = GDP)) +
+ # geom_sf(color = NA) +
+  #scale_fill_viridis_c(
+   # name = "Per Capita GDP",
+    #breaks = brs,
+    #labels = labls) +
+  #theme_map() +
+  #theme(legend.background = element_blank())
+```
+
+
+
