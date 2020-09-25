@@ -1,0 +1,246 @@
+---
+title: "Vis Assignment 3"
+author: "Aron Lesser"
+date: "9/25/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load libraries, include=FALSE}
+library(sf)
+library(tidyverse)
+library(ggthemes)
+library(ggspatial)
+library(units)
+library(nngeo)
+```
+
+```{r}
+nhoods <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+
+openspace <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/2868d370c55d4d458d4ae2224ef8cddd_7.kml", quiet =TRUE)
+
+public_schools <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/1d9509a8b2fd485d9ad471ba2fdb1f90_0.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+
+n_schools <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/0046426a3e4340a6b025ad52b41be70a_1.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+
+```
+
+
+Transforming the data
+
+```{r}
+MA_state_plane <- "+proj=lcc +lat_1=41.71666666666667 +lat_2=42.68333333333333 +lat_0=41 +lon_0=-71.5 +x_0=200000 +y_0=750000 +ellps=GRS80 +units=m +no_defs"
+
+
+nhoods <- nhoods %>%
+  st_transform(MA_state_plane)
+
+openspace <- openspace %>%
+  st_transform(MA_state_plane)
+
+public_schools <- public_schools %>%
+  st_transform(MA_state_plane)
+
+n_schools <- n_schools %>%
+  st_transform(MA_state_plane)
+
+```
+
+
+
+
+```{r}
+ggplot(openspace) +
+  geom_sf(fill = "lightgreen", color = NA) +
+  geom_sf(data = public_schools, color = "blue", size = 0.01) +
+  geom_sf(data = n_schools, color = "black", size = 0.01) +
+  geom_sf(data= nhoods, fill = NA, color = "gray") +
+  theme_map() +
+  annotation_scale()
+```
+
+
+Creating a buffer around public and private schools
+
+```{r}
+open_buffer <- st_buffer(openspace, dist = 100) %>%
+  st_union()
+
+ggplot(open_buffer) +
+  geom_sf() +
+  theme_map()
+```
+
+Subsetting parks and public schools
+
+```{r}
+public_ospace <- public_schools[open_buffer,]
+  
+ggplot(open_buffer) +
+  geom_sf() +
+  geom_sf(data = public_ospace, 
+          color = "darkgreen", 
+          size = 0.01) +
+  theme_map()
+```
+
+Joining datasets
+
+```{r}
+public_schools <- public_schools %>%
+  st_join(public_ospace) %>%
+  mutate(by_openspace = !is.na(Name.y))
+```
+
+
+Calculating how many public schools are within 100 meters of an open space
+
+
+```{r}
+n_openspace_public <- sum(public_schools$by_openspace)
+
+n_openspace_public
+```
+
+Percent of all public schools
+
+```{r}
+n_public <- length(public_schools$by_openspace)
+
+pct_openspace_public <- n_openspace_public / n_public
+
+pct_openspace_public
+```
+
+Nearly 60% of public schools are located within 100 meters of a park.
+
+
+
+
+Mapping it 
+
+```{r}
+left_side  <- st_bbox(public_schools)$xmin
+top_side <- st_bbox(public_schools)$ymax
+
+ggplot(openspace) +
+  geom_sf(fill = "lightblue", color = NA) +
+  geom_sf(data = public_schools, size = 0.01,
+          aes(color = by_openspace)) +
+  scale_color_manual(values = c("lightgreen", "darkgreen"),
+          name = "Boston Public Schools\nby distance to an open space", 
+          labels = c("No open space within 100 m",
+                     "Open space within 100 m")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side, 
+           y = top_side, 
+           label = paste("Of the ", 
+                         prettyNum(n_public, big.mark = ","),
+                         " public schools in Boston\n", 
+                         prettyNum(n_openspace_public, big.mark = ","),
+                         " (", 
+                         prettyNum(100*pct_openspace_public, digits = 0),
+                         "%) are within 100\nmeters of an open space",
+                         sep = ""),
+           hjust = 0, vjust = 0.75, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "cornsilk1"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"),
+        legend.position = c(0.7, 0.2))
+```
+
+
+# Chloropleth number of public schools in each neighborhood
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_public_schools = lengths(st_covers(nhoods, public_schools)))
+
+ggplot(nhoods) +
+  geom_sf(color = NA, 
+          aes(fill = num_public_schools)) +
+  scale_fill_viridis_c(name = "Boston neighborhoods\nby number of public schools",
+                       breaks = breaks <- seq(0, 30, by = 6),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "public schools")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+theme_map() +
+  theme(legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+
+
+
+
+# Chloropleth number of private schools in each neighborhood
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_n_schools = lengths(st_covers(nhoods, n_schools)))
+
+ggplot(nhoods) +
+  geom_sf(color = NA, 
+          aes(fill = num_n_schools)) +
+  scale_fill_viridis_c(name = "Boston neighborhoods\nby number of private schools",
+                       breaks = breaks <- seq(0, 30, by = 6),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "private schools")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+theme_map() +
+  theme(legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r fig.width=8, fig.height=8}
+ggplot(neighborhoods) +
+  geom_sf(aes(fill=Name)) +
+geom_sf(data = schools) +
+theme_map()
+theme(legend.position = c(0.7, 0))
+
+```
+
+
+Count schools in each neighborhood
+
+```{r}
+test <- st_covers(neighborhoods, schools)
+
+lengths(test)
+```
+
+```{r}
+neighborhoods <- neighborhoods >%>
+  
+```
+
