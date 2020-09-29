@@ -2,7 +2,13 @@
 title: "Vis Assignment 3"
 author: "Aron Lesser"
 date: "9/25/2020"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: lumen
+    highlight: tango
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
@@ -19,6 +25,16 @@ library(units)
 library(nngeo)
 ```
 
+
+# Loading Data
+
+I loaded 4 sets of data for Boston: 
+
+1. Boston neighborhood boundaries
+2. Open space in Boston boundaries
+3. Public Schools 
+4. Private Schools
+
 ```{r}
 nhoods <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
 
@@ -31,7 +47,7 @@ n_schools <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/
 ```
 
 
-Transforming the data
+# Transforming the data
 
 ```{r}
 MA_state_plane <- "+proj=lcc +lat_1=41.71666666666667 +lat_2=42.68333333333333 +lat_0=41 +lon_0=-71.5 +x_0=200000 +y_0=750000 +ellps=GRS80 +units=m +no_defs"
@@ -52,7 +68,7 @@ n_schools <- n_schools %>%
 ```
 
 
-
+# Plotting everything on a map 
 
 ```{r}
 ggplot(openspace) +
@@ -65,7 +81,12 @@ ggplot(openspace) +
 ```
 
 
-Creating a buffer around public and private schools
+# Calculating Proximity of Public and Private Schools to Parks
+
+
+## Public Schools
+
+I began Creating a 100 meter buffer around open spaces. This will allow me to assess how many schools are in close proximity to open spaces. 
 
 ```{r}
 open_buffer <- st_buffer(openspace, dist = 100) %>%
@@ -76,7 +97,7 @@ ggplot(open_buffer) +
   theme_map()
 ```
 
-Subsetting parks and public schools
+I then subset the open spaces and public schools
 
 ```{r}
 public_ospace <- public_schools[open_buffer,]
@@ -89,7 +110,7 @@ ggplot(open_buffer) +
   theme_map()
 ```
 
-Joining datasets
+Next, I join those datasets
 
 ```{r}
 public_schools <- public_schools %>%
@@ -98,7 +119,7 @@ public_schools <- public_schools %>%
 ```
 
 
-Calculating how many public schools are within 100 meters of an open space
+Here, I Calculate how many public schools are within 100 meters of an open space
 
 
 ```{r}
@@ -107,7 +128,7 @@ n_openspace_public <- sum(public_schools$by_openspace)
 n_openspace_public
 ```
 
-Percent of all public schools
+I then calculate what percent of all public schools those within 100 meters of open spaces represent.
 
 ```{r}
 n_public <- length(public_schools$by_openspace)
@@ -117,12 +138,11 @@ pct_openspace_public <- n_openspace_public / n_public
 pct_openspace_public
 ```
 
-Nearly 60% of public schools are located within 100 meters of a park.
+Nearly 60% of public schools are located within 100 meters of an open space
 
 
 
-
-Mapping it 
+### Mapping Public Schools and Open Spaces 
 
 ```{r}
 left_side  <- st_bbox(public_schools)$xmin
@@ -157,8 +177,93 @@ ggplot(openspace) +
         legend.position = c(0.7, 0.2))
 ```
 
+## Private Schools and open spaces
 
-# Chloropleth number of public schools in each neighborhood
+
+I subset open spaces and private schools
+
+```{r}
+private_ospace <- n_schools[open_buffer,]
+  
+ggplot(open_buffer) +
+  geom_sf() +
+  geom_sf(data = private_ospace, 
+          color = "darkgreen", 
+          size = 0.01) +
+  theme_map()
+```
+
+Next, I join the datasets for private schools
+
+```{r}
+n_schools <- n_schools %>%
+  st_join(private_ospace) %>%
+  mutate(by_openspace = !is.na(Name.y))
+```
+
+
+I then calculate how many private schools are within 100 meters of an open space
+
+
+```{r}
+n_openspace_private <- sum(n_schools$by_openspace)
+
+n_openspace_private
+```
+
+I calculate the percent of all private schools that those within 100 meters of an open space represent.
+
+```{r}
+n_private <- length(n_schools$by_openspace)
+
+pct_openspace_private <- n_openspace_private / n_private
+
+pct_openspace_private
+```
+
+67% of private schools are located within 100 meters of a park.
+
+
+### Mapping Private Schools and Open Spaces
+
+```{r}
+left_side  <- st_bbox(n_schools)$xmin
+top_side <- st_bbox(n_schools)$ymax
+
+ggplot(openspace) +
+  geom_sf(fill = "lightblue", color = NA) +
+  geom_sf(data = n_schools, size = 0.01,
+          aes(color = by_openspace)) +
+  scale_color_manual(values = c("green", "darkgreen"),
+          name = "Boston Private Schools\nby distance to an open space", 
+          labels = c("No open space within 100 m",
+                     "Open space within 100 m")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side, 
+           y = top_side, 
+           label = paste("Of the ", 
+                         prettyNum(n_public, big.mark = ","),
+                         " private schools in Boston\n", 
+                         prettyNum(n_openspace_private, big.mark = ","),
+                         " (", 
+                         prettyNum(100*pct_openspace_private, digits = 0),
+                         "%) are within 100\nmeters of an open space",
+                         sep = ""),
+           hjust = 0, vjust = 0.2, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "cornsilk1"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"),
+        legend.position = c(0.7, 0.2))
+```
+
+
+The results from the analyses demonstrate that in Boston, a larger percentage of private schools are within close proximity to an open space (67%) than public schools (60%). 
+
+
+# Choropleth map of the number of public schools in each neighborhood
 
 ```{r}
 nhoods <- nhoods %>%
@@ -176,14 +281,12 @@ ggplot(nhoods) +
                          style = north_arrow_minimal()) +
 theme_map() +
   theme(legend.background = element_rect(fill = alpha("white", 0.5), 
-                                         color = "gray"))
+                                         color = "gray"),
+        legend.position = c(0.7, 0.1))
 ```
 
 
-
-
-
-# Chloropleth number of private schools in each neighborhood
+# Choropleth map of the number of private schools in each neighborhood
 
 ```{r}
 nhoods <- nhoods %>%
@@ -201,46 +304,194 @@ ggplot(nhoods) +
                          style = north_arrow_minimal()) +
 theme_map() +
   theme(legend.background = element_rect(fill = alpha("white", 0.5), 
-                                         color = "gray"))
+                                         color = "gray"),
+        legend.position = c(0.7, 0.1))
 ```
 
+The largest neighborhood in the city, Dorchester, has the most private and public schools. There are notable differences in some northern neighborhoods, which seem to have a greater number of public schools. I also notice differences in some central neighborhoods, which have disproportionately more public schools than private schools.
 
+# Average public school distance from open space
 
+Here I calculate the average distance of public schools from open spaces. 
 
+```{r results='hide'}
+public_schools <- public_schools %>%
+  mutate(open_dist = st_nn(public_schools, openspace, 
+                           returnDist = TRUE)$dist) %>%
+  mutate(open_dist = as.numeric(open_dist))
 
+avg_open_dist <- mean(public_schools$open_dist)
 
+avg_open_dist
+```
 
-
-
-
-
-
-
-
-
-
+I hide the results, which had a long string of lines and percentages. The result is 113.8929.
 
 
 ```{r fig.width=8, fig.height=8}
-ggplot(neighborhoods) +
-  geom_sf(aes(fill=Name)) +
-geom_sf(data = schools) +
-theme_map()
-theme(legend.position = c(0.7, 0))
+right_side <- st_bbox(public_schools)$xmax
+left_side  <- st_bbox(public_schools)$xmin
+top_side <- st_bbox(public_schools)$ymax
+bottom_side <- st_bbox(public_schools)$ymin
 
+
+ggplot(openspace) +
+  geom_sf(fill = "lightgreen", color = NA) +
+  geom_sf(data = public_schools, size = 0.1,
+          aes(color = open_dist)) +
+  coord_sf(xlim = c(left_side, right_side), 
+           ylim = c(bottom_side, top_side), expand = FALSE) +
+  scale_color_viridis_c(name = 
+                          "Boston Public Schools \nby distance to an open space (meters) ") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side + 300, 
+           y = top_side - 550, 
+           label = paste("On average, a Boston public school \nis ", 
+                         prettyNum(avg_open_dist, digits = 3),
+                         " meters from an open space",
+                         sep = ""),
+           hjust = 0, vjust = .6, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "cornsilk1"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"),
+        legend.position = c(0.63, 0.03))
 ```
 
 
-Count schools in each neighborhood
+
+
+# Private school distance from open space
+
+I calculate the average distance of private schools from open spaces. 
+
+```{r results='hide'}
+n_schools <- n_schools %>%
+  mutate(open_dist = st_nn(n_schools, openspace, 
+                           returnDist = TRUE)$dist) %>%
+  mutate(open_dist = as.numeric(open_dist))
+
+avg_open_dist_private <- mean(n_schools$open_dist)
+
+avg_open_dist_private
+
+```
+I hide the results, which had a long string of lines and percentages. The result is 93.04991.
+
+
+Mapping Private School Distance from Open Space
+
+
+```{r fig.width=8, fig.height=8}
+right_side <- st_bbox(n_schools)$xmax
+left_side  <- st_bbox(n_schools)$xmin
+top_side <- st_bbox(n_schools)$ymax
+bottom_side <- st_bbox(n_schools)$ymin
+
+
+ggplot(openspace) +
+  geom_sf(fill = "lightgreen", color = NA) +
+  geom_sf(data = n_schools, size = 0.1,
+          aes(color = open_dist)) +
+  coord_sf(xlim = c(left_side, right_side), 
+           ylim = c(bottom_side, top_side), expand = FALSE) +
+  scale_color_viridis_c(name = 
+                          "Boston Private Schools \nby distance to an open space (meters) ") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side + 300, 
+           y = top_side - 550, 
+           label = paste("On average, a Boston Private school \nis ", 
+                         prettyNum(avg_open_dist_private, digits = 3),
+                         " meters from an open space",
+                         sep = ""),
+           hjust = 0, vjust = .6, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "cornsilk1"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"),
+        legend.position = c(0.65, 0.03))
+```
+
+In Boston, these findings suggest that private schools are nearly 10% closer to open spaces than public schools. 
+
+
+# Calculating the percentage of land that open spaces represent in Dorchester and South Boston
+
+## Area of neighborhoods 
+
+Here, I add the areas in square kilometers to my datasets
+```{r}
+
+
+openspace <- openspace %>%
+   mutate(openarea = set_units(st_area(openspace), km^2)) 
+
+
+
+nhoods <- nhoods %>%
+  mutate(area = set_units(st_area(nhoods), km^2))
+
+
+
+
+```
+
+## Finding the amount of land that is open space in Dorchester
+
+I calculate the area of open spaces within the subset of Dorchetser. 
+
 
 ```{r}
-test <- st_covers(neighborhoods, schools)
+Dorch <- nhoods[22,]
 
-lengths(test)
+subset_parks_dorchester <- openspace[Dorch,]
+
+sum(subset_parks_dorchester$openarea)
+
 ```
+
+There are 2.86 km2 of open space in Dorchester, whose land area is 18.87129 km2. Therefore, 15.2% of Dorchester is occupied by open spaces. 
+
+
+# Finding the amount of land that is open space in South Boston Waterfront
 
 ```{r}
-neighborhoods <- neighborhoods >%>
-  
+SBW <- nhoods[23,] 
+
+subset_parks_SBW <- openspace[SBW,]
+
+sum(subset_parks_SBW$openarea)
+
+
 ```
 
+#Finding the amount of land that is open space in South Boston 
+
+I combine the two because I consider both South Boston and South Boston Waterfront to be part of the same neighborhood. 
+
+```{r}
+SB <- nhoods[24,] 
+
+subset_parks_SB <- openspace[SB,]
+
+sum(subset_parks_SB$openarea)
+
+
+```
+
+The area of open space in SBW is .083 km2
+The area of open space in SB is .82 km 2
+Therefore, the amount of open space in South Boston is .903 km2
+
+The area of SBW is 2.52km2
+The area of SB is 5.83 km2
+Therefore, the area of South Boston is 8.35km2
+
+Thus, 11% of South Boston is occupied by open spaces.
+
+
+As a note, I imagine there is a more streamlined way to calculate the neighborhood areas that are occupied by open spaces. I would like to find a more efficient way to do so. 
