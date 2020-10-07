@@ -168,7 +168,10 @@ ggplot(iso_areas,
             "Area within a ten-minute driving distance\nof a hospital\n(square km)",
             breaks = breaks <- seq(0, 8000000, by = 1000000),
             labels = breaks / 1000000) +
-  labs(fill = "Distance 10-minute walk (M)") +
+  scale_fill_viridis_c(
+    name = "Distance 10-minute walk (M)",
+    breaks = seq(10000, 800000, by = 20000),
+    labels = formatC(seq(10000, 800000, by=20000), big.mark = ",", format = "f", digits = 0)) +
   theme_bw() 
 ```
 
