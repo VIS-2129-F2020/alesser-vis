@@ -135,7 +135,7 @@ ggplot(iso_areas,
   geom_point() +
   scale_x_continuous(name = 
             "Area within a ten-minute walking distance\nof a hospital\n(square km)",
-            breaks = breaks <- seq(10000, 800000, by = 20000),
+            breaks = breaks <- seq(0, 800000, by = 20000),
             labels = breaks / 1000000) +
   scale_y_continuous(name = 
             "Area within a ten-minute driving distance\nof a hospital\n(square km)",
@@ -144,6 +144,7 @@ ggplot(iso_areas,
   theme_bw()
 
 ```
+Plotting these areas helps to demonstrate that there is not necessarily a direct relationship between walkshed and driveshed areas.
 
 # Comparing areas on a bar graph of driving distance with the walk distance fill
 
@@ -169,15 +170,11 @@ ggplot(iso_areas,
             breaks = breaks <- seq(0, 8000000, by = 1000000),
             labels = breaks / 1000000) +
   scale_fill_viridis_c(
-    name = "Distance 10-minute walk (M)",
-    breaks = seq(10000, 800000, by = 20000),
-    labels = formatC(seq(10000, 800000, by=20000), big.mark = ",", format = "f", digits = 0)) +
+    name = "Area within 10-minute walk",
+     breaks = breaks <- seq(0, 800000, by = 20000),
+            labels = breaks / 1000000) +
   theme_bw() 
 ```
-
-
-
-I was having trouble understanding how to change the legend to km rather than meters. 
-
+While this representation is imperfect, it demonstrates how drivesheds and walksheds are not directly related. Tufts Medical Center makes this most clear. 
 
 
