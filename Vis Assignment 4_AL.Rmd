@@ -135,11 +135,11 @@ ggplot(iso_areas,
   geom_point() +
   scale_x_continuous(name = 
             "Area within a ten-minute walking distance\nof a hospital\n(square km)",
-            breaks = breaks <- seq(0, 400000, by = 10000),
+            breaks = breaks <- seq(10000, 800000, by = 20000),
             labels = breaks / 1000000) +
   scale_y_continuous(name = 
             "Area within a ten-minute driving distance\nof a hospital\n(square km)",
-            breaks = breaks <- seq(0, 400000, by = 100000),
+           breaks = breaks <- seq(0, 8000000, by = 1000000),
             labels = breaks / 1000000) +
   theme_bw()
 
@@ -166,7 +166,7 @@ ggplot(iso_areas,
                                   "Mass General\nHospital")) +
   scale_y_continuous(name = 
             "Area within a ten-minute driving distance\nof a hospital\n(square km)",
-            breaks = breaks <- seq(0, 400000, by = 100000),
+            breaks = breaks <- seq(0, 8000000, by = 1000000),
             labels = breaks / 1000000) +
   labs(fill = "Distance 10-minute walk (M)") +
   theme_bw() 
