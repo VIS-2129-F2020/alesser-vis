@@ -1,0 +1,76 @@
+---
+title: "Interactive Map"
+author: "Aron Lesser"
+date: "10/21/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: lumen
+    highlight: tango
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(htmltools)
+library(htmlwidgets)
+library(rnaturalearth)
+```
+
+```{r}
+atl_inc <- st_read("https://opendata.arcgis.com/datasets/81fe86ded7fd4b4bbf297ade6829ab0c_14.geojson")
+```
+
+```{r}
+Congress <- st_read(
+  "https://data.cityofnewyork.us/api/geospatial/qd3c-zuu7?method=export&format=GeoJSON")
+```
+
+
+```{r}
+ATLOP <- st_read("724fbcf5-4e71-4822-85f0-f24511e2da4c202048-1-1rsy41w.y806.shp")
+```
+
+```{r}
+#schools_pts <- st_centroid(Schools)
+```
+
+```{r}
+
+
+#atl_inc <- st_read("https://opendata.arcgis.com/datasets/81fe86ded7fd4b4bbf297ade6829ab0c_14.geojson")
+
+colors_bins <- colorFactor(heat.colors(10), atl_inc$BPA_SEGMENT)
+
+atl_inc$describe <- 
+  paste(atl_inc$NAME, "<br>", "Region:", atl_inc$BPA_SEGMENT, "<br>", "Size:",
+               prettyNum(atl_inc$ACRES, digits = 2), "acres") %>% 
+  lapply(htmltools::HTML)
+
+zone_map <- leaflet(atl_inc,
+                       options = leafletOptions(minZoom = 10)) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(fillColor = colors_bins(atl_inc$BPA_SEGMENT), stroke = FALSE,
+              highlightOptions = highlightOptions(fillColor = "darkgreen", 
+                                                  fillOpacity = 1),
+              label = ~describe) %>%
+  addControl("Inclusionary Zones", position = "topright") %>%
+  addControl('<a href="https://opendata.arcgis.com/datasets/81fe86ded7fd4b4bbf297ade6829ab0c_14.geojson">Data source</a>',
+             position = "bottomleft")
+             
+zone_map
+
+
+
+
+```
+
+
