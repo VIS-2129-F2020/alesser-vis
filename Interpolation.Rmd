@@ -1,0 +1,140 @@
+---
+title: "Interpolation"
+author: "Aron Lesser"
+date: "10/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(htmltools)
+library(htmlwidgets)
+library(raster)
+library(gstat)
+library(spatial)
+library(stringr)
+```
+
+Reading census tract file with median income. Here I select the geoid and med. income only. I then mutate the geo_id into geoid10 which is the name on the other dataset, transform it into numeric, and isolate the last 11 numbers . 
+```{r}
+tracts_info <- st_read("income_boston_tracts.csv", quiet = TRUE) %>%
+  dplyr::select(GEO_ID, S1901_C01_012E) %>%
+  mutate(GEOID10 = as.numeric (str_sub(GEO_ID,-11,-1))) %>%
+  dplyr::select(GEOID10, S1901_C01_012E) 
+  
+  
+
+```
+
+Here I make geoid 10 into a numeric so that they can be joined
+```{r}
+census_tracts <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/4a8eb4fb3be44ed5a1eec28551b9f3b2_0.geojson?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D", quiet = TRUE) %>%
+  mutate (GEOID10 = as.numeric(GEOID10))
+
+```
+
+I create a new dataset with the left join 
+```{r}
+income <- left_join(census_tracts, tracts_info, by = "GEOID10", copy = FALSE) %>%
+  mutate(S1901_C01_012E = case_when(S1901_C01_012E == "-" ~ NA_real_,
+                                            S1901_C01_012E != "-" ~ as.numeric(S1901_C01_012E))) %>%
+  mutate(S1901_C01_012E = case_when(is.na(S1901_C01_012E) ~ round(mean(S1901_C01_012E, na.rm = TRUE),1),
+                                          !is.na(S1901_C01_012E) ~ S1901_C01_012E)) 
+  
+
+income = income[-48,]
+```
+
+
+Mapping income census tract data
+```{r}
+
+income$describe <- 
+  paste("Tract", income$OBJECTID, "<br>", "Median Income", "$",prettyNum(income$S1901_C01_012E, digits = 4))%>% 
+  lapply(htmltools::HTML)
+
+bins <- seq(min(income$S1901_C01_012E),
+            max(income$S1901_C01_012E), by = 20000)
+pal <- colorNumeric("viridis", 
+                    domain = income$S1901_C01_012E,
+                    na.color = "#00000000")
+
+leaflet(income) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(highlightOptions = highlightOptions(fillOpacity = 1),
+              label = income$describe,
+              fillColor = ~pal(S1901_C01_012E),
+              weight = 1, color = "black") %>% 
+  addLegend(pal = pal, 
+            values = ~S1901_C01_012E,
+            bins = 10,
+            opacity = 0.7, title = "Median Income",
+            position = "topright")
+```
+
+Income as points
+```{r}
+MA_state_plane <- "+proj=lcc +lat_1=41.71666666666667 +lat_2=42.68333333333333 +lat_0=41 +lon_0=-71.5 +x_0=200000 +y_0=750000 +ellps=GRS80 +units=m +no_defs "
+
+WGS84 <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+
+income_points <- st_centroid(
+  st_transform(income, crs = MA_state_plane)) %>%
+  st_transform(WGS84)
+
+leaflet(income_points) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addCircles(highlightOptions = highlightOptions(fillOpacity = 1),
+              label = income$describe,
+              fillColor = ~pal(S1901_C01_012E),
+             stroke = FALSE,
+              radius = 50,
+             fillOpacity = 1) %>% 
+  addLegend(pal = pal, 
+            values = ~S1901_C01_012E,
+            bins = 10,
+            opacity = 0.7, title = "Median Income",
+            position = "topright")
+```
+
+
+Convert to spatial
+
+```{r}
+income_points_sp <- income_points %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+
+income_poly_sp <- income %>%
+  st_transform(MA_state_plane) %>%
+  as_Spatial()
+```
+
+```{r}
+boston_raster <- raster(income_poly_sp, res=10)
+```
+
+```{r}
+gs <- gstat(formula=S1901_C01_012E~1, locations=income_points_sp)
+idw_interp <- interpolate(boston_raster, gs)
+
+idw_interp_clip <- mask(idw_interp, income_poly_sp)
+```
+
+```{r}
+leaflet(income_points) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8) %>% 
+  addLegend(pal = pal, 
+            values = ~S1901_C01_012E,
+            bins = 10,
+            opacity = 0.7, title = "Median Income",
+            position = "topright")
+```
+
