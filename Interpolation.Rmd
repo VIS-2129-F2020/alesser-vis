@@ -2,14 +2,20 @@
 title: "Interpolation"
 author: "Aron Lesser"
 date: "10/30/2020"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: lumen
+    highlight: tango
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r include=FALSE}
 library(tidyverse)
 library(sf)
 library(leaflet)
@@ -21,8 +27,12 @@ library(spatial)
 library(stringr)
 ```
 
-Reading census tract file with median income. Here I select the geoid and med. income only. I then mutate the geo_id into geoid10 which is the name on the other dataset, transform it into numeric, and isolate the last 11 numbers . 
-```{r}
+
+# Adding Data
+
+I read the downloaded census tract file with median income. Here I select the geoid and med.income only. I then mutate the geo_id into geoid10 which is the name on the other dataset, transform it into numeric, and isolate the last 11 numbers . 
+
+```{r warning=FALSE}
 tracts_info <- st_read("income_boston_tracts.csv", quiet = TRUE) %>%
   dplyr::select(GEO_ID, S1901_C01_012E) %>%
   mutate(GEOID10 = as.numeric (str_sub(GEO_ID,-11,-1))) %>%
@@ -33,14 +43,14 @@ tracts_info <- st_read("income_boston_tracts.csv", quiet = TRUE) %>%
 ```
 
 Here I make geoid 10 into a numeric so that they can be joined
-```{r}
+```{r message=FALSE}
 census_tracts <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/4a8eb4fb3be44ed5a1eec28551b9f3b2_0.geojson?outSR=%7B%22latestWkid%22%3A3857%2C%22wkid%22%3A102100%7D", quiet = TRUE) %>%
   mutate (GEOID10 = as.numeric(GEOID10))
 
 ```
 
 I create a new dataset with the left join 
-```{r}
+```{r warning=FALSE}
 income <- left_join(census_tracts, tracts_info, by = "GEOID10", copy = FALSE) %>%
   mutate(S1901_C01_012E = case_when(S1901_C01_012E == "-" ~ NA_real_,
                                             S1901_C01_012E != "-" ~ as.numeric(S1901_C01_012E))) %>%
@@ -52,8 +62,9 @@ income = income[-48,]
 ```
 
 
-Mapping income census tract data
-```{r}
+# Mapping median income in boston with a choropleth
+
+```{r warning=FALSE}
 
 income$describe <- 
   paste("Tract", income$OBJECTID, "<br>", "Median Income", "$",prettyNum(income$S1901_C01_012E, digits = 4))%>% 
@@ -78,8 +89,8 @@ leaflet(income) %>%
             position = "topright")
 ```
 
-Income as points
-```{r}
+# Mapping median income as points
+```{r warning=FALSE}
 MA_state_plane <- "+proj=lcc +lat_1=41.71666666666667 +lat_2=42.68333333333333 +lat_0=41 +lon_0=-71.5 +x_0=200000 +y_0=750000 +ellps=GRS80 +units=m +no_defs "
 
 WGS84 <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
@@ -106,7 +117,7 @@ leaflet(income_points) %>%
 
 Convert to spatial
 
-```{r}
+```{r warning=FALSE}
 income_points_sp <- income_points %>%
   st_transform(MA_state_plane) %>%
   as_Spatial()
@@ -116,18 +127,20 @@ income_poly_sp <- income %>%
   as_Spatial()
 ```
 
-```{r}
+```{r warning=FALSE}
 boston_raster <- raster(income_poly_sp, res=10)
 ```
 
-```{r}
+```{r warning=FALSE}
 gs <- gstat(formula=S1901_C01_012E~1, locations=income_points_sp)
 idw_interp <- interpolate(boston_raster, gs)
 
 idw_interp_clip <- mask(idw_interp, income_poly_sp)
 ```
 
-```{r}
+# Mappping interpolation median income
+
+```{r warning=FALSE}
 leaflet(income_points) %>%
   addProviderTiles(providers$Stamen.TonerLite) %>%
   addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8) %>% 
@@ -137,4 +150,8 @@ leaflet(income_points) %>%
             opacity = 0.7, title = "Median Income",
             position = "topright")
 ```
+
+#Discussion
+
+While I see value in usign an interpolation for certain circumstances, it is not necessarily a better tool than a simple choropleth map. It would be interesting to do the same exercise with neighborhood - rather than census tract - income data. If I only had a few data points for income, then interpolation would be a more appropriate method. 
 
